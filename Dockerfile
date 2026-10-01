@@ -18,6 +18,11 @@ ENV PIP_PREFER_BINARY=1
 # `comfy install` step below pulls hundreds of MB, and pip's default 15s
 # read timeout aborts slow-but-progressing downloads (build failed on this 2026-10-01).
 ENV PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10
+# Route pip/uv through the Tsinghua PyPI mirror: the self-hosted Mac builder's
+# route to files.pythonhosted.org measured ~50-160 kB/s vs ~15 MB/s via this
+# mirror (2026-10-01). Applies to `comfy install` (pip) and `uv pip` steps.
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 # Ensures output from python is printed immediately to the terminal without buffering
 ENV PYTHONUNBUFFERED=1
 # Speed up some cmake builds
