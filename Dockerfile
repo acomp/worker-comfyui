@@ -13,7 +13,7 @@ ARG PYTORCH_INDEX_URL
 # Prevents prompts from packages asking for user input during installation
 ENV DEBIAN_FRONTEND=noninteractive
 # Prefer binary wheels over source distributions for faster pip installations
-ENV PIP_PREFER_BINARY=
+ENV PIP_PREFER_BINARY=1
 # Harden pip against slow/flaky PyPI during long dependency installs: the
 # `comfy install` step below pulls hundreds of MB, and pip's default 15s
 # read timeout aborts slow-but-progressing downloads (build failed on this 2026-10-01).
