@@ -219,6 +219,13 @@ FROM base AS final
 # MODEL_TYPE must be re-declared after FROM for this stage to see the build arg
 ARG MODEL_TYPE=flux1-dev-fp8
 
+# Set to "false" to skip baking the ~44GB MiniMax H3 weights into this stage.
+# The GitHub crane-append pipeline (build-minimaxh3.yml) builds a slim image
+# with "false" and streams each weight file on as an image layer afterwards,
+# so a free runner never needs ~2x the weights on disk during export.
+# Empty/unset keeps the old behavior (weights baked in, e.g. Mac builds).
+ARG INCLUDE_MINIMAXH3_MODELS
+
 # Copy models from stage 2 to the final image.
 # For minimaxh3 this only copies the (empty) model directories created above;
 # the actual ~44GB MiniMax H3 model files are downloaded directly in this
@@ -227,7 +234,7 @@ COPY --from=downloader /comfyui/models /comfyui/models
 
 # MiniMax H3 reference-to-video model set (~44GB total): video/audio VAEs,
 # pruned int8 DiT, Qwen3-VL-32B NVFP4 text encoder, 4-step turbo LoRA.
-RUN if [ "$MODEL_TYPE" = "minimaxh3" ]; then \
+RUN if [ "$MODEL_TYPE" = "minimaxh3" ] && [ "${INCLUDE_MINIMAXH3_MODELS:-true}" = "true" ]; then \
       mkdir -p /comfyui/models/vae /comfyui/models/diffusion_models /comfyui/models/text_encoders /comfyui/models/loras && \
       wget -q -O /comfyui/models/vae/minimax_h3_video_vae_fp16.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors && \
       wget -q -O /comfyui/models/vae/minimax_h3_audio_vae_fp32.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors && \
