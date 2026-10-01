@@ -1,23 +1,15 @@
 name: Build MiniMax H3 ref-to-video image
 
-# Bakes the minimaxh3 image (MiniMax H3 reference-to-video stack:
-# diffusion model + video/audio VAEs + Qwen3-VL-32B text encoder +
-# optional 4-step turbo LoRA, all from Comfy-Org/MiniMax-H3 on
-# HuggingFace) so the ref2va workflow JSON can be submitted to the worker.
+# Two-phase build for the ~61GB minimaxh3 image, adapted from
+# vincezh2000/minimax-h3-comfyui-serverless:
 #
-# NOTE: this workflow runs on a SELF-HOSTED runner (the ~61GB image cannot
-# be exported on GitHub's free hosted runners: disk too small).
-# One-time Mac setup (Apple Silicon):
-# 1. Install Docker Desktop for Mac (ARM64).
-# 2. Docker Desktop > Settings > General: enable
-#    "Use Rosetta for x86_64/amd64 emulation".
-# 3. Docker Desktop > Settings > Resources: set "Virtual disk limit" to
-#    at least 150 GB (the build needs ~120 GB; default 64 GB is too small).
-# 4. Make sure the Mac has ~130 GB free disk space.
-# 5. Repo > Settings > Actions > Runners > New self-hosted runner > macOS
-#    ARM64, then run the shown ./config.sh / ./run.sh (or ./svc.sh
-#    install + start) on the Mac. Keep the Mac awake during the build.
-# 6. After the image is pushed, remove the runner.
+# Phase 1: `docker build` a SLIM image (ComfyUI + deps, no weights, ~17GB)
+#          and push it as <version>-code. Fits on a free GitHub runner.
+# Phase 2: stream each of the 5 MiniMax H3 weight files (~44GB total) onto it
+#          as an image layer with `crane append`. Peak disk = one weight file
+#          + its tar. A naive single `docker build` with the weights baked in
+#          needs ~2x the weight size on disk during export and dies with
+#          "no space left on device" on free runners (seen 2026-10-01).
 #
 # Prerequisites in the fork (one-time, already done):
 # 1. Settings > Actions > General: enable "Allow all actions and reusable workflows"
@@ -39,12 +31,23 @@ on:
 
 jobs:
   build-minimaxh3:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,7 +56,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+password: <redacted>
 
       - name: Set environment variables
         run: |
@@ -61,7 +64,7 @@ jobs:
           echo "DOCKERHUB_IMG=${{ vars.DOCKERHUB_IMG }}" >> $GITHUB_ENV
           echo "RELEASE_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
 
-      - name: Build and push minimaxh3 image
+      - name: Build and push slim image (no weights)
         uses: docker/bake-action@v2
         with:
           push: true
@@ -70,3 +73,42 @@ jobs:
             *.args.DOCKERHUB_REPO=${{ env.DOCKERHUB_REPO }}
             *.args.DOCKERHUB_IMG=${{ env.DOCKERHUB_IMG }}
             *.args.RELEASE_VERSION=${{ env.RELEASE_VERSION }}
+            *.args.INCLUDE_MINIMAXH3_MODELS=false
+            *.tags=${{ env.DOCKERHUB_REPO }}/${{ env.DOCKERHUB_IMG }}:${{ env.RELEASE_VERSION }}-code
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      # Stream each weight file onto the slim image as its own layer.
+      # crane talks directly to the registry: the ~61GB image is never
+      # assembled on the runner's disk.
+      - name: Append MiniMax H3 weight layers with crane
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq aria2
+          crane auth login index.docker.io -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_TOKEN"
+          WORK=/mnt/weights
+          sudo mkdir -p "$WORK" && sudo chown "$USER" "$WORK"
+          IMG="$DOCKERHUB_REPO/$DOCKERHUB_IMG"
+          BASE="$IMG:$RELEASE_VERSION-code"
+          HF=https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main
+          append() { # $1 = models subdir, $2 = filename
+            mkdir -p "$WORK/stage/comfyui/models/$1"
+            aria2c -x16 -s16 -k1M --console-log-level=warn \
+              --dir="$WORK/stage/comfyui/models/$1" -o "$2" "$HF/$1/$2"
+            tar --owner=0 --group=0 -cf "$WORK/layer.tar" -C "$WORK/stage" comfyui
+            rm -rf "$WORK/stage"
+            crane append -b "$BASE" -f "$WORK/layer.tar" -t "$IMG:wip"
+            rm -f "$WORK/layer.tar"
+            BASE="$IMG:wip"
+            df -h /mnt | tail -1
+          }
+          append vae minimax_h3_video_vae_fp16.safetensors
+          append vae minimax_h3_audio_vae_fp32.safetensors
+          append diffusion_models minimax_h3_ref2va_pruned_int8_convrot.safetensors
+          append text_encoders qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+          append loras minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+          crane tag "$IMG:wip" "$RELEASE_VERSION"
