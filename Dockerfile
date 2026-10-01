@@ -165,7 +165,7 @@ RUN if [ "$MODEL_TYPE" = "sdxl" ]; then \
       wget -q -O models/checkpoints/sd_xl_base_1.0.safetensors https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors && \
       wget -q -O models/vae/sdxl_vae.safetensors https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors && \
       wget -q -O models/vae/sdxl-vae-fp16-fix.safetensors https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl_vae.safetensors && \
-      wget -q -O models/checkpoints/juggernautXL_juggXIByRundiffusion.safetensors "https://civitai.com/api/download/models/782002" && \
+      wget -q -O models/checkpoints/pornmaster_proSDXLV8.safetensors "https://civitai-delivery-worker-prod.5ac0637cfd0766c97916cefa3764fbdf.r2.cloudflarestorage.com/model/73783/pornmasterProSDXLV8.IIwh.safetensors?X-Amz-Expires=86400&response-content-disposition=attachment%3B filename%3D%22pornmaster_proSDXLV8.safetensors%22&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=e01358d793ad6966166af8b3064953ad/20261001/us-east-1/s3/aws4_request&X-Amz-Date=20261001T180412Z&X-Amz-SignedHeaders=host&X-Amz-Signature=7f0c7cd1ffc68c0a39fd804c23105aaa3c4c793255c2b7270fc6721f20c723b4" && \
       wget -q -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors && \
       wget -q -O models/ipadapter/ip-adapter-plus-face_sdxl_vit-h.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.safetensors && \
       wget -q -O /tmp/buffalo_l.zip https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
