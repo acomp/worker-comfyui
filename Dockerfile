@@ -59,6 +59,19 @@ RUN if [ -n "${CUDA_VERSION_FOR_COMFY}" ]; then \
       /usr/bin/yes | comfy --workspace /comfyui install --version "${COMFYUI_VERSION}" --nvidia; \
     fi
 
+# Install custom nodes required by the IPAdapter FaceID workflow.
+# Cloned BEFORE the dependency-install step below so their requirements.txt
+# files are picked up by the loop that installs every custom node's deps.
+# - ComfyUI_IPAdapter_plus: IPAdapterModelLoader, IPAdapterFaceID,
+#   IPAdapterInsightFaceLoader nodes (+ no extra pip requirements)
+# - rgthree-comfy: "Image Comparer (rgthree)" node used by the workflow
+RUN git clone --depth 1 https://github.com/cubiq/ComfyUI_IPAdapter_plus.git /comfyui/custom_nodes/ComfyUI_IPAdapter_plus \
+    && git clone --depth 1 https://github.com/rgthree/rgthree-comfy.git /comfyui/custom_nodes/rgthree-comfy
+
+# insightface + onnxruntime are required at runtime by the FaceID nodes
+# (IPAdapterInsightFaceLoader extracts the face embedding with insightface).
+RUN uv pip install insightface onnxruntime
+
 # Upgrade PyTorch if needed (for newer CUDA versions)
 RUN if [ "$ENABLE_PYTORCH_UPGRADE" = "true" ]; then \
       uv pip install --force-reinstall torch torchvision torchaudio --index-url ${PYTORCH_INDEX_URL}; \
@@ -141,13 +154,19 @@ ARG MODEL_TYPE=flux1-dev-fp8
 WORKDIR /comfyui
 
 # Create necessary directories upfront
-RUN mkdir -p models/checkpoints models/vae models/unet models/clip models/text_encoders models/diffusion_models models/model_patches
+RUN mkdir -p models/checkpoints models/vae models/unet models/clip models/text_encoders models/diffusion_models models/model_patches models/clip_vision models/ipadapter models/insightface/models
 
 # Download checkpoints/vae/unet/clip models to include in image based on model type
 RUN if [ "$MODEL_TYPE" = "sdxl" ]; then \
       wget -q -O models/checkpoints/sd_xl_base_1.0.safetensors https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors && \
       wget -q -O models/vae/sdxl_vae.safetensors https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors && \
-      wget -q -O models/vae/sdxl-vae-fp16-fix.safetensors https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl_vae.safetensors; \
+      wget -q -O models/vae/sdxl-vae-fp16-fix.safetensors https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl_vae.safetensors && \
+      wget -q -O models/checkpoints/juggernautXL_juggXIByRundiffusion.safetensors "https://civitai.com/api/download/models/782002" && \
+      wget -q -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors && \
+      wget -q -O models/ipadapter/ip-adapter-plus-face_sdxl_vit-h.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.safetensors && \
+      wget -q -O /tmp/buffalo_l.zip https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
+      python3 -c "import zipfile; zipfile.ZipFile('/tmp/buffalo_l.zip').extractall('models/insightface/models/buffalo_l')" && \
+      rm /tmp/buffalo_l.zip; \
     fi
 
 RUN if [ "$MODEL_TYPE" = "sd3" ]; then \
