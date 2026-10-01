@@ -1,3 +1,11 @@
+# Prefer binary wheels over source distributions for faster pip installations
+ENV PIP_PREFER_BINARY=1
+
+# Harden pip against slow/flaky PyPI during long dependency installs: the
+# `comfy install` step below pulls hundreds of MB, and pip's default 15s
+# read timeout aborts slow-but-progressing downloads (build failed on this 2026-10-01).
+ENV PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10
+
 # Build argument for base image selection
 ARG BASE_IMAGE=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
