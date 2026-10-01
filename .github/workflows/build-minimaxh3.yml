@@ -5,6 +5,20 @@ name: Build MiniMax H3 ref-to-video image
 # optional 4-step turbo LoRA, all from Comfy-Org/MiniMax-H3 on
 # HuggingFace) so the ref2va workflow JSON can be submitted to the worker.
 #
+# NOTE: this workflow runs on a SELF-HOSTED runner (the ~61GB image cannot
+# be exported on GitHub's free hosted runners: disk too small).
+# One-time Mac setup (Apple Silicon):
+# 1. Install Docker Desktop for Mac (ARM64).
+# 2. Docker Desktop > Settings > General: enable
+#    "Use Rosetta for x86_64/amd64 emulation".
+# 3. Docker Desktop > Settings > Resources: set "Virtual disk limit" to
+#    at least 150 GB (the build needs ~120 GB; default 64 GB is too small).
+# 4. Make sure the Mac has ~130 GB free disk space.
+# 5. Repo > Settings > Actions > Runners > New self-hosted runner > macOS
+#    ARM64, then run the shown ./config.sh / ./run.sh (or ./svc.sh
+#    install + start) on the Mac. Keep the Mac awake during the build.
+# 6. After the image is pushed, remove the runner.
+#
 # Prerequisites in the fork (one-time, already done):
 # 1. Settings > Actions > General: enable "Allow all actions and reusable workflows"
 # 2. Settings > Secrets and variables > Actions:
@@ -25,23 +39,12 @@ on:
 
 jobs:
   build-minimaxh3:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          df -h
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
