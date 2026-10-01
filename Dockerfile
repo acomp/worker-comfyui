@@ -202,16 +202,31 @@ RUN if [ "$MODEL_TYPE" = "z-image-turbo" ]; then \
       wget -q --header="Authorization: Bearer ${HUGGINGFACE_ACCESS_TOKEN}" -O models/model_patches/Z-Image-Turbo-Fun-Controlnet-Union.safetensors https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union/resolve/main/Z-Image-Turbo-Fun-Controlnet-Union.safetensors; \
     fi
 
-RUN if [ "$MODEL_TYPE" = "minimaxh3" ]; then \
-  wget -q -O models/vae/minimax_h3_video_vae_fp16.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors && \
-  wget -q -O models/vae/minimax_h3_audio_vae_fp32.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors && \
-  wget -q -O models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors && \
-  wget -q -O models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors && \
-  wget -q -O models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors; \
-fi
+# NOTE: minimaxh3 models (~44GB) are intentionally NOT downloaded here.
+# They are downloaded directly in the final stage below: keeping them in the
+# downloader stage and COPYing them into the final image stores the 44GB
+# twice during the build, which exhausts the GitHub Actions runner disk
+# ("no space left on device" at COPY --from=downloader, 2026-10-01).
 
 # Stage 3: Final image
 FROM base AS final
 
-# Copy models from stage 2 to the final image
+# MODEL_TYPE must be re-declared after FROM for this stage to see the build arg
+ARG MODEL_TYPE=flux1-dev-fp8
+
+# Copy models from stage 2 to the final image.
+# For minimaxh3 this only copies the (empty) model directories created above;
+# the actual ~44GB MiniMax H3 model files are downloaded directly in this
+# stage (see below) so they are stored exactly once.
 COPY --from=downloader /comfyui/models /comfyui/models
+
+# MiniMax H3 reference-to-video model set (~44GB total): video/audio VAEs,
+# pruned int8 DiT, Qwen3-VL-32B NVFP4 text encoder, 4-step turbo LoRA.
+RUN if [ "$MODEL_TYPE" = "minimaxh3" ]; then \
+      mkdir -p /comfyui/models/vae /comfyui/models/diffusion_models /comfyui/models/text_encoders /comfyui/models/loras && \
+      wget -q -O /comfyui/models/vae/minimax_h3_video_vae_fp16.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors && \
+      wget -q -O /comfyui/models/vae/minimax_h3_audio_vae_fp32.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors && \
+      wget -q -O /comfyui/models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors && \
+      wget -q -O /comfyui/models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors && \
+      wget -q -O /comfyui/models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors; \
+    fi
