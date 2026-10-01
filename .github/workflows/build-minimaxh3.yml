@@ -1,0 +1,69 @@
+name: Build MiniMax H3 ref-to-video image
+
+# Bakes the minimaxh3 image (MiniMax H3 reference-to-video stack:
+# diffusion model + video/audio VAEs + Qwen3-VL-32B text encoder +
+# optional 4-step turbo LoRA, all from Comfy-Org/MiniMax-H3 on
+# HuggingFace) so the ref2va workflow JSON can be submitted to the worker.
+#
+# Prerequisites in the fork (one-time, already done):
+# 1. Settings > Actions > General: enable "Allow all actions and reusable workflows"
+# 2. Settings > Secrets and variables > Actions:
+#    - Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
+#    - Variables: DOCKERHUB_REPO (e.g. acomp), DOCKERHUB_IMG (e.g. worker-comfyui)
+#
+# The produced tag is: <DOCKERHUB_REPO>/<DOCKERHUB_IMG>:<version>
+# (default version "minimaxh3-ref-to-video").
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag version (e.g. minimaxh3-ref-to-video)"
+        required: false
+        default: "minimaxh3-ref-to-video"
+        type: string
+
+jobs:
+  build-minimaxh3:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set environment variables
+        run: |
+          echo "DOCKERHUB_REPO=${{ vars.DOCKERHUB_REPO }}" >> $GITHUB_ENV
+          echo "DOCKERHUB_IMG=${{ vars.DOCKERHUB_IMG }}" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+
+      - name: Build and push minimaxh3 image
+        uses: docker/bake-action@v2
+        with:
+          push: true
+          targets: minimaxh3
+          set: |
+            *.args.DOCKERHUB_REPO=${{ env.DOCKERHUB_REPO }}
+            *.args.DOCKERHUB_IMG=${{ env.DOCKERHUB_IMG }}
+            *.args.RELEASE_VERSION=${{ env.RELEASE_VERSION }}
