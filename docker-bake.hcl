@@ -35,6 +35,13 @@ variable "HUGGINGFACE_ACCESS_TOKEN" {
   default = ""
 }
 
+# "false" builds the slim image without the ~44GB MiniMax H3 weights
+# (the crane-append pipeline adds them as layers afterwards).
+# Empty/unset keeps the old behavior: weights baked into the image.
+variable "INCLUDE_MINIMAXH3_MODELS" {
+  default = "true"
+}
+
 group "default" {
   targets = ["base", "sdxl", "sd3", "flux1-schnell", "flux1-dev", "flux1-dev-fp8", "z-image-turbo", "minimaxh3", "base-cuda12-8-1"]
 }
